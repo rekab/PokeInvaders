@@ -12,11 +12,30 @@ export enum PokemonType {
   DRAGON = 'Dragon',
 }
 
+export enum ShootPattern {
+  NORMAL = 'normal',
+  SHOTGUN = 'shotgun', // Spread fire
+  RICOCHET = 'ricochet', // Bounces to next target
+  SNIPER = 'sniper', // Fast, high damage, slow reload
+  RAPID = 'rapid', // Fast fire rate
+}
+
 export interface Stats {
   hp: number;
   maxHp: number;
   attack: number;
   speed: number;
+  // New Stats for mechanics
+  fireRate: number; // ms between shots
+  moveSpeed: number; // modifier for player movement
+  projectileSpeed: number; // pixels per second
+}
+
+export interface ActiveBuffs {
+  rapidFireExpires?: number; // Timestamp
+  spreadExpires?: number; // Timestamp
+  shieldExpires?: number; // Timestamp
+  shieldMaxDuration?: number; // To calculate thickness
 }
 
 export interface Pokemon {
@@ -26,6 +45,7 @@ export interface Pokemon {
   nickname: string; // User defined name
   type: PokemonType;
   stats: Stats;
+  shootPattern: ShootPattern;
   level: number;
   xp: number;
   xpToNextLevel: number;
@@ -33,6 +53,7 @@ export interface Pokemon {
   projectileColor: string;
   evolvesTo?: string; // speciesId of next form
   evolutionLevel?: number;
+  activeBuffs: ActiveBuffs;
 }
 
 export interface Enemy {
@@ -43,6 +64,18 @@ export interface Enemy {
   height: number;
   pokemon: Pokemon;
   direction: 1 | -1; // 1 = right, -1 = left
+  attackFrame: number; // 0 = none, >0 = showing attack frame
+}
+
+export interface Acrobat {
+  id: string;
+  x: number;
+  y: number;
+  startX: number;
+  width: number;
+  height: number;
+  direction: 1 | -1;
+  timeAlive: number;
 }
 
 export interface BarrierCell {
@@ -85,10 +118,48 @@ export interface Projectile {
   y: number;
   width: number;
   height: number;
-  dy: number; // vertical speed (negative for player, positive for enemy)
+  vx: number; // horizontal velocity
+  vy: number; // vertical velocity
   damage: number;
   type: PokemonType;
-  owner: 'player' | 'enemy';
+  owner: 'player' | 'enemy' | 'neutral';
+  bouncesLeft: number; 
+}
+
+export interface Particle {
+  id: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number; // 0-1
+  type: PokemonType;
+}
+
+export interface MysteryShip {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  direction: 1 | -1;
+  active: boolean;
+}
+
+export enum PowerUpType {
+  HEALTH = 'health',
+  RAPID = 'rapid',
+  SPREAD = 'spread',
+  SHIELD = 'shield'
+}
+
+export interface PowerUp {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  type: PowerUpType;
 }
 
 export interface GameState {
@@ -97,7 +168,9 @@ export interface GameState {
   isGameOver: boolean;
   wave: number;
   score: number;
+  highScore: number;
   lastFrameTime: number;
+  globalAnimFrame: 0 | 1; // For synchronizing enemy walks
 }
 
 export interface Rect {

@@ -10,17 +10,24 @@ interface HUDProps {
   onSwap: (index: number) => void;
   onPause: () => void;
   onRequestRename: (id: string) => void;
+  cooldownProgress?: number;
 }
 
-const HUD: React.FC<HUDProps> = ({ activePokemon, team, gameState, onSwap, onPause, onRequestRename }) => {
+const HUD: React.FC<HUDProps> = ({ activePokemon, team, gameState, onSwap, onPause, onRequestRename, cooldownProgress = 100 }) => {
   
+  const hasRapidBuff = activePokemon.activeBuffs.rapidFireExpires && activePokemon.activeBuffs.rapidFireExpires > Date.now();
+  const hasSpreadBuff = activePokemon.activeBuffs.spreadExpires && activePokemon.activeBuffs.spreadExpires > Date.now();
+
   return (
     <div className="w-full max-w-[800px] mt-4 flex flex-col gap-2 p-4 bg-gray-900 border-4 border-gray-700 rounded-lg shadow-2xl relative">
       {/* Top Bar */}
       <div className="flex justify-between items-start border-b-2 border-gray-700 pb-2 mb-2">
         <div className="flex flex-col">
           <h1 className="text-2xl text-yellow-400 font-bold tracking-widest drop-shadow-md">WAVE {gameState.wave}</h1>
-          <p className="text-sm text-white font-mono">SCORE: <span className="text-green-400">{gameState.score.toString().padStart(6, '0')}</span></p>
+          <div className="flex gap-4 text-sm font-mono">
+              <p className="text-white">SCORE: <span className="text-green-400">{gameState.score.toString().padStart(6, '0')}</span></p>
+              <p className="text-gray-400">HI: <span className="text-yellow-600">{gameState.highScore.toString().padStart(6, '0')}</span></p>
+          </div>
         </div>
         
         {/* Active Mon Status */}
@@ -46,7 +53,6 @@ const HUD: React.FC<HUDProps> = ({ activePokemon, team, gameState, onSwap, onPau
               <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold drop-shadow-md z-10">
                 {activePokemon.stats.hp} / {activePokemon.stats.maxHp}
               </span>
-              {/* Grid lines for retro feel */}
               <div className="absolute inset-0 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVQIW2NkQAKrVq36zwjjgzjIHFBmAAxxAA0NDaF8Dg4AAy4J5/3K6+AAAAAASUVORK5CYII=')] opacity-20"></div>
             </div>
           </div>
@@ -57,6 +63,22 @@ const HUD: React.FC<HUDProps> = ({ activePokemon, team, gameState, onSwap, onPau
               className="h-full bg-blue-400"
               style={{ width: `${(activePokemon.xp / activePokemon.xpToNextLevel) * 100}%` }}
             />
+          </div>
+
+          {/* Cooldown Bar */}
+          {(activePokemon.stats.fireRate || 500) > 600 && !hasRapidBuff && (
+             <div className="flex items-center gap-2 mt-1">
+                 <span className="text-[8px] text-yellow-500">RELOAD</span>
+                 <div className="w-20 h-1 bg-gray-700">
+                     <div className={`h-full ${cooldownProgress >= 100 ? 'bg-yellow-400' : 'bg-red-500'}`} style={{ width: `${cooldownProgress}%` }}></div>
+                 </div>
+             </div>
+          )}
+
+          {/* Buff Indicators */}
+          <div className="flex gap-2 mt-1">
+              {hasRapidBuff && <span className="text-[9px] px-1 bg-yellow-900 text-yellow-200 rounded border border-yellow-500 animate-pulse">RAPID FIRE</span>}
+              {hasSpreadBuff && <span className="text-[9px] px-1 bg-purple-900 text-purple-200 rounded border border-purple-500 animate-pulse">SHOTGUN</span>}
           </div>
         </div>
       </div>
@@ -78,12 +100,10 @@ const HUD: React.FC<HUDProps> = ({ activePokemon, team, gameState, onSwap, onPau
                  <PixelSprite speciesId={poke.speciesId} />
               </div>
               
-              {/* Mini Health Bar */}
               <div className="w-10 h-1 bg-gray-800 mt-1">
                   <div className={`h-full ${poke.stats.hp < poke.stats.maxHp * 0.3 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${(poke.stats.hp / poke.stats.maxHp) * 100}%` }}></div>
               </div>
               
-              {/* Selection Indicator */}
               {poke.id === activePokemon.id && (
                 <div className="absolute top-0 right-0 w-2 h-2 bg-yellow-400 animate-ping rounded-full"></div>
               )}
@@ -93,14 +113,13 @@ const HUD: React.FC<HUDProps> = ({ activePokemon, team, gameState, onSwap, onPau
           
           {Array.from({ length: 3 - team.length }).map((_, i) => (
              <div key={`empty-${i}`} className="w-14 h-16 border-2 border-dashed border-gray-700 rounded flex items-center justify-center text-gray-700 text-xs">
-               +
+               DEAD
              </div>
           ))}
         </div>
 
         {/* Bench / Controls / Pause */}
         <div className="flex items-end gap-4">
-             {/* Visual target for capture animation */}
              <div className="flex flex-col items-center justify-end text-xs text-gray-500" id="bench-target">
                  <span className="mb-1">BENCH</span>
                  <div className="w-10 h-10 border-2 border-gray-600 rounded bg-gray-800 flex items-center justify-center">

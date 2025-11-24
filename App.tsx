@@ -2,9 +2,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { 
   GAME_WIDTH, GAME_HEIGHT, PLAYER_WIDTH, PLAYER_SPEED, 
-  BASE_ENEMY_SPEED, ENEMY_DROP_DISTANCE, PROJECTILE_HEIGHT, PROJECTILE_WIDTH, ENEMY_HEIGHT, ENEMY_WIDTH, POKEDEX 
+  BASE_ENEMY_SPEED, ENEMY_DROP_DISTANCE, PROJECTILE_HEIGHT, PROJECTILE_WIDTH, ENEMY_HEIGHT, ENEMY_WIDTH, POKEDEX, TYPE_CHART
 } from './constants';
-import { Pokemon, Enemy, Projectile, GameState, PokemonType, Barrier, Explosion, CaptureAnim } from './types';
+import { Pokemon, Enemy, Projectile, GameState, PokemonType, Barrier, Explosion, CaptureAnim, ShootPattern, Particle, MysteryShip, PowerUp, PowerUpType, Acrobat, Rect } from './types';
 import { createPokemon, getWaveEnemies, calculateDamage, checkEvolution, generateBarriers } from './services/gameLogic';
 import { AudioService } from './services/audioService';
 import GameCanvas from './components/GameCanvas';
@@ -21,10 +21,12 @@ const App: React.FC = () => {
     isGameOver: false,
     wave: 1,
     score: 0,
+    highScore: 0,
     lastFrameTime: 0,
+    globalAnimFrame: 0,
   });
 
-  const [team, setTeam] = useState<Pokemon[]>([createPokemon('charmander'), createPokemon('squirtle'), createPokemon('bulbasaur')]);
+  const [team, setTeam] = useState<Pokemon[]>([]);
   const [bench, setBench] = useState<Pokemon[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   
@@ -32,6 +34,7 @@ const App: React.FC = () => {
   const [showBench, setShowBench] = useState(false);
   const [gameMessage, setGameMessage] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [cooldownProgress, setCooldownProgress] = useState(0); // 0-100 for HUD
   
   const activePokemon = team[activeIndex];
 
@@ -39,22 +42,43 @@ const App: React.FC = () => {
   const playerXRef = useRef(GAME_WIDTH / 2);
   const enemiesRef = useRef<Enemy[]>([]);
   const projectilesRef = useRef<Projectile[]>([]);
+  const particlesRef = useRef<Particle[]>([]);
   const barriersRef = useRef<Barrier[]>([]);
   const explosionsRef = useRef<Explosion[]>([]);
   const captureAnimsRef = useRef<CaptureAnim[]>([]);
+  const mysteryShipRef = useRef<MysteryShip | null>(null);
+  const acrobatsRef = useRef<Acrobat[]>([]);
+  const powerupsRef = useRef<PowerUp[]>([]);
   const keysPressed = useRef<Record<string, boolean>>({});
   const lastShotTime = useRef(0);
   const animationFrameId = useRef<number>(0);
+  const globalAnimTimer = useRef(0);
+  const mysteryShipTimer = useRef(0);
+  const lastUfoSoundTime = useRef(0);
 
   // --- React State for Rendering (Syncs with Refs occasionally or per frame) ---
-  const [renderTrigger, setRenderTrigger] = useState(0); // Dummy state to force re-render
+  const [renderTrigger, setRenderTrigger] = useState(0); 
+
+  // --- Load High Score ---
+  useEffect(() => {
+    const saved = localStorage.getItem('pokeinvaders_highscore');
+    if (saved) {
+        setGameState(prev => ({ ...prev, highScore: parseInt(saved) }));
+    }
+  }, []);
+
+  // --- Save High Score ---
+  useEffect(() => {
+    if (gameState.score > gameState.highScore) {
+        setGameState(prev => ({ ...prev, highScore: gameState.score }));
+        localStorage.setItem('pokeinvaders_highscore', gameState.score.toString());
+    }
+  }, [gameState.score]);
 
   // --- Controls ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't capture keys if renaming
       if (renamingId) return;
-
       keysPressed.current[e.key] = true;
       if (e.key.toLowerCase() === 'p') togglePause();
       if (['1', '2', '3'].includes(e.key)) {
@@ -78,11 +102,13 @@ const App: React.FC = () => {
     setGameState(prev => ({ ...prev, isPaused: !prev.isPaused }));
   };
 
-  // --- Helper: Start Wave ---
   const startWave = useCallback((waveNum: number) => {
     enemiesRef.current = getWaveEnemies(waveNum, GAME_WIDTH);
     projectilesRef.current = [];
-    // Always regenerate barriers fully at start of wave
+    particlesRef.current = [];
+    powerupsRef.current = [];
+    mysteryShipRef.current = null;
+    acrobatsRef.current = [];
     barriersRef.current = generateBarriers(GAME_WIDTH, waveNum);
     explosionsRef.current = [];
     captureAnimsRef.current = [];
@@ -94,78 +120,183 @@ const App: React.FC = () => {
 
   // --- Game Loop ---
   const update = useCallback((time: number) => {
-    // Stop loop if not playing or paused
     if (!gameState.isPlaying || gameState.isPaused || gameState.isGameOver) {
-       // Just keep requesting frame to check for unpause, but don't update logic
        if (gameState.isPlaying && !gameState.isGameOver) {
-          // It's just paused
+          // Paused
        } else {
-          // It's dead or menu
           animationFrameId.current = requestAnimationFrame(update);
           return;
        }
     }
     
-    // If paused, skip logic update
     if (gameState.isPaused) {
        animationFrameId.current = requestAnimationFrame(update);
        return;
     }
 
     const deltaTime = (time - gameState.lastFrameTime) / 1000;
-    // Cap delta time to prevent huge jumps
     const dt = Math.min(deltaTime, 0.1); 
     
-    // 1. Player Movement
-    if (keysPressed.current['ArrowLeft']) {
-      playerXRef.current = Math.max(PLAYER_WIDTH / 2, playerXRef.current - PLAYER_SPEED * dt);
-    }
-    if (keysPressed.current['ArrowRight']) {
-      playerXRef.current = Math.min(GAME_WIDTH - PLAYER_WIDTH / 2, playerXRef.current + PLAYER_SPEED * dt);
+    // Global Animation Toggle
+    globalAnimTimer.current += dt;
+    if (globalAnimTimer.current > 0.5) {
+       setGameState(prev => ({ ...prev, globalAnimFrame: prev.globalAnimFrame === 0 ? 1 : 0 }));
+       globalAnimTimer.current = 0;
     }
 
-    // 2. Shooting
-    if (keysPressed.current[' '] && time - lastShotTime.current > (500 - (activePokemon.stats.speed * 10))) {
-      // DYNAMIC PROJECTILE SPEED: 300 base + (speed stat * 15)
-      const projectileSpeed = 300 + (activePokemon.stats.speed * 15);
-      
-      projectilesRef.current.push({
-        id: Math.random().toString(),
-        x: playerXRef.current, // Centered on player center, offset handled in canvas
-        y: GAME_HEIGHT - 60,
-        width: PROJECTILE_WIDTH,
-        height: PROJECTILE_HEIGHT,
-        dy: -projectileSpeed, 
-        damage: activePokemon.stats.attack,
-        type: activePokemon.type,
-        owner: 'player'
-      });
+    // Mystery Ship Logic
+    mysteryShipTimer.current += dt;
+    // Spawn roughly every 20 seconds
+    if (!mysteryShipRef.current && Math.random() < 0.001) {
+        const startLeft = Math.random() > 0.5;
+        mysteryShipRef.current = {
+            id: uuidv4(),
+            x: startLeft ? -50 : GAME_WIDTH + 50,
+            y: 40,
+            width: 48,
+            height: 32,
+            direction: startLeft ? 1 : -1,
+            active: true
+        };
+        AudioService.playUFO();
+        lastUfoSoundTime.current = time;
+    }
+    
+    if (mysteryShipRef.current) {
+        mysteryShipRef.current.x += 150 * mysteryShipRef.current.direction * dt; 
+
+        // Sound Loop
+        if (time - lastUfoSoundTime.current > 350) {
+            AudioService.playUFO();
+            lastUfoSoundTime.current = time;
+        }
+
+        // Remove if off screen
+        if (mysteryShipRef.current.direction === 1 && mysteryShipRef.current.x > GAME_WIDTH + 50) {
+            mysteryShipRef.current = null;
+        } else if (mysteryShipRef.current.direction === -1 && mysteryShipRef.current.x < -50) {
+            mysteryShipRef.current = null;
+        }
+    }
+
+    // Acrobat Jet Logic (Spawns ~ every 15s, more aggressive)
+    if (Math.random() < 0.0015) {
+        const startLeft = Math.random() > 0.5;
+        acrobatsRef.current.push({
+            id: uuidv4(),
+            x: startLeft ? -50 : GAME_WIDTH + 50,
+            startX: startLeft ? -50 : GAME_WIDTH + 50,
+            y: 100,
+            width: 48,
+            height: 32,
+            direction: startLeft ? 1 : -1,
+            timeAlive: 0
+        });
+        AudioService.playJetEngine();
+    }
+
+    acrobatsRef.current.forEach(jet => {
+        jet.timeAlive += dt;
+        // Horizontal movement
+        jet.x += 250 * jet.direction * dt;
+        // Sine wave + Loop movement
+        const sineY = Math.sin(jet.timeAlive * 3) * 80;
+        const loopY = Math.sin(jet.timeAlive * 2) * 40;
+        jet.y = 150 + sineY + loopY;
+    });
+    // Cleanup jets
+    acrobatsRef.current = acrobatsRef.current.filter(j => j.x > -100 && j.x < GAME_WIDTH + 100);
+
+
+    // Check Buff Expiry
+    const now = Date.now();
+    const hasRapidBuff = activePokemon.activeBuffs.rapidFireExpires && activePokemon.activeBuffs.rapidFireExpires > now;
+    const hasSpreadBuff = activePokemon.activeBuffs.spreadExpires && activePokemon.activeBuffs.spreadExpires > now;
+    const hasShield = activePokemon.activeBuffs.shieldExpires && activePokemon.activeBuffs.shieldExpires > now;
+
+    // Player Movement
+    const moveSpeed = PLAYER_SPEED * (activePokemon.stats.moveSpeed || 1);
+    if (keysPressed.current['ArrowLeft']) {
+      playerXRef.current = Math.max(PLAYER_WIDTH / 2, playerXRef.current - moveSpeed * dt);
+    }
+    if (keysPressed.current['ArrowRight']) {
+      playerXRef.current = Math.min(GAME_WIDTH - PLAYER_WIDTH / 2, playerXRef.current + moveSpeed * dt);
+    }
+
+    // Shooting
+    let fireRate = activePokemon.stats.fireRate || 500;
+    if (hasRapidBuff) fireRate *= 0.5; // Double fire rate
+
+    const timeSinceShot = time - lastShotTime.current;
+    
+    if (timeSinceShot < fireRate) {
+        setCooldownProgress((timeSinceShot / fireRate) * 100);
+    } else {
+        setCooldownProgress(100);
+    }
+
+    if (keysPressed.current[' '] && timeSinceShot > fireRate && activePokemon.stats.hp > 0) {
+      let projSpeed = activePokemon.stats.projectileSpeed || 400;
+      if (hasRapidBuff) projSpeed *= 1.5;
+
+      let pattern = activePokemon.shootPattern || ShootPattern.NORMAL;
+      if (hasSpreadBuff) pattern = ShootPattern.SHOTGUN;
+
+      const spawnProj = (vx: number, vy: number, bounces: number) => {
+          projectilesRef.current.push({
+            id: Math.random().toString(),
+            x: playerXRef.current, 
+            y: GAME_HEIGHT - 60,
+            width: PROJECTILE_WIDTH,
+            height: PROJECTILE_HEIGHT,
+            vx, vy, 
+            damage: Math.ceil(activePokemon.stats.attack * (hasSpreadBuff ? 0.7 : 1)), 
+            type: activePokemon.type,
+            owner: 'player',
+            bouncesLeft: bounces
+          });
+      };
+
+      if (pattern === ShootPattern.SHOTGUN) {
+          [-0.3, 0, 0.3].forEach(angle => {
+              spawnProj(Math.sin(angle) * projSpeed, -Math.cos(angle) * projSpeed, 0);
+          });
+          if (hasSpreadBuff && activePokemon.shootPattern === ShootPattern.SHOTGUN) {
+              [-0.5, 0.5].forEach(angle => {
+                   spawnProj(Math.sin(angle) * projSpeed, -Math.cos(angle) * projSpeed, 0);
+              });
+          }
+      } else {
+          spawnProj(0, -projSpeed, pattern === ShootPattern.RICOCHET ? 1 : 0);
+      }
+
       lastShotTime.current = time;
       AudioService.playShoot(activePokemon.type);
     }
 
-    // 3. Enemy Logic
+    // Enemy Logic
     let hitWall = false;
     enemiesRef.current.forEach(enemy => {
-      // ACCELERATION LOGIC: Base + (Wave * 5) + (Y position factor)
-      // The lower they get, the faster they move horizontally
-      const verticalBoost = (enemy.y / GAME_HEIGHT) * 100; // Up to +100 speed at bottom
+      const verticalBoost = (enemy.y / GAME_HEIGHT) * 100; 
       const moveSpeed = BASE_ENEMY_SPEED + (gameState.wave * 5) + verticalBoost;
       
       enemy.x += moveSpeed * enemy.direction * dt;
-      
-      // Random enemy shooting
+      if (enemy.attackFrame > 0) enemy.attackFrame--;
+
       if (Math.random() < 0.001 * gameState.wave) {
+         enemy.attackFrame = 10; 
          projectilesRef.current.push({
           id: Math.random().toString(),
           x: enemy.x + ENEMY_WIDTH/2,
           y: enemy.y + ENEMY_HEIGHT,
           width: PROJECTILE_WIDTH,
           height: PROJECTILE_HEIGHT,
-          dy: 200,
+          vx: 0,
+          vy: 200,
           damage: enemy.pokemon.stats.attack,
           type: enemy.pokemon.type,
-          owner: 'enemy'
+          owner: 'enemy',
+          bouncesLeft: 0
         });
         AudioService.playEnemyShoot();
       }
@@ -179,65 +310,134 @@ const App: React.FC = () => {
       enemiesRef.current.forEach(enemy => {
         enemy.direction *= -1;
         enemy.y += ENEMY_DROP_DISTANCE;
-        // Clamp x to prevent sticking
         if(enemy.x <= 0) enemy.x = 1;
         if(enemy.x + enemy.width >= GAME_WIDTH) enemy.x = GAME_WIDTH - enemy.width - 1;
       });
     }
 
-    // 4. Projectile Movement
-    projectilesRef.current.forEach(p => {
-      p.y += p.dy * dt;
+    // Powerup Movement
+    powerupsRef.current.forEach(p => {
+        p.y += 100 * dt; // Fall slow
+        p.x += Math.sin(time / 200) * 1; // Slight sway
     });
+    powerupsRef.current = powerupsRef.current.filter(p => p.y < GAME_HEIGHT);
 
-    // 5. Cleanup Projectiles
-    projectilesRef.current = projectilesRef.current.filter(p => p.y > -20 && p.y < GAME_HEIGHT + 20);
+    // Projectile Movement & Trail Generation
+    projectilesRef.current.forEach(p => {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      
+      if (Math.random() < 0.3) {
+          particlesRef.current.push({
+              id: Math.random().toString(),
+              x: p.x,
+              y: p.y,
+              vx: (Math.random() - 0.5) * 20,
+              vy: (Math.random() - 0.5) * 20,
+              life: 1.0,
+              type: p.type
+          });
+      }
+    });
+    projectilesRef.current = projectilesRef.current.filter(p => p.y > -20 && p.y < GAME_HEIGHT + 20 && p.x > -20 && p.x < GAME_WIDTH + 20);
 
-    // 6. Cleanup Explosions
-    explosionsRef.current = explosionsRef.current.filter(e => time - e.startTime < 500); // 500ms duration
+    // Update Particles
+    particlesRef.current.forEach(p => {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt * 2; // Fade out fast
+    });
+    particlesRef.current = particlesRef.current.filter(p => p.life > 0);
 
-    // 7. Update Capture Animations
+    // Cleanup Explosions (Duration 500ms)
+    explosionsRef.current = explosionsRef.current.filter(e => time - e.startTime < 500); 
+
+    // Update Capture Animations
     const activeAnims: CaptureAnim[] = [];
     captureAnimsRef.current.forEach(anim => {
-        // Simple Lerp to Bench Target (Bottom Right approx x:700, y:550)
         const targetX = GAME_WIDTH - 100;
-        const targetY = GAME_HEIGHT + 50; // Off screen bottom
-
-        anim.progress += dt * 1.5; // 1.5 speed multiplier
+        const targetY = GAME_HEIGHT + 50; 
+        anim.progress += dt * 1.5; 
         
         if (anim.progress < 1) {
-            // Parabolic Arc
             const linearX = anim.startX + (targetX - anim.startX) * anim.progress;
             const linearY = anim.startY + (targetY - anim.startY) * anim.progress;
-            // Add slight curve
             const height = 100 * Math.sin(anim.progress * Math.PI); 
             
             anim.currentX = linearX;
             anim.currentY = linearY - height;
-            
             activeAnims.push(anim);
-        } else {
-            // Animation Done - Actually add to bench state here if we wanted to be precise, 
-            // but we added it earlier for responsiveness.
         }
     });
     captureAnimsRef.current = activeAnims;
 
-
-    // 8. Collision Detection
-    // Player Rect
+    // Collision Detection
     const playerRect = { x: playerXRef.current - PLAYER_WIDTH/2, y: GAME_HEIGHT - 50, width: PLAYER_WIDTH, height: PLAYER_WIDTH };
     
-    // Enemy vs Player BODY and Enemy vs Barrier BODY
+    // 1. Player vs Powerups
+    const claimedPowerups: string[] = [];
+    powerupsRef.current.forEach(p => {
+        const pRect = { x: p.x, y: p.y, width: p.width, height: p.height };
+        if (rectIntersect(playerRect, pRect)) {
+            claimedPowerups.push(p.id);
+            AudioService.playPowerupCollect();
+            setGameMessage(`GOT ${p.type.toUpperCase()}!`);
+            setTimeout(() => setGameMessage(null), 1500);
+
+            // Apply Buff
+            const newTeam = [...team];
+            const current = newTeam[activeIndex];
+            if (p.type === PowerUpType.HEALTH) {
+                current.stats.hp = Math.min(current.stats.maxHp, current.stats.hp + (current.stats.maxHp * 0.5));
+            } else if (p.type === PowerUpType.RAPID) {
+                const currentExpiry = current.activeBuffs.rapidFireExpires || Date.now();
+                const base = Math.max(Date.now(), currentExpiry);
+                current.activeBuffs = { ...current.activeBuffs, rapidFireExpires: base + 15000 };
+            } else if (p.type === PowerUpType.SPREAD) {
+                const currentExpiry = current.activeBuffs.spreadExpires || Date.now();
+                const base = Math.max(Date.now(), currentExpiry);
+                current.activeBuffs = { ...current.activeBuffs, spreadExpires: base + 15000 };
+            } else if (p.type === PowerUpType.SHIELD) {
+                // Add 15s to shield
+                const currentExpiry = current.activeBuffs.shieldExpires || Date.now();
+                const base = Math.max(Date.now(), currentExpiry);
+                current.activeBuffs = { 
+                  ...current.activeBuffs, 
+                  shieldExpires: base + 15000,
+                  shieldMaxDuration: 15000 // Reset max for calculation
+                };
+            }
+            setTeam(newTeam);
+        }
+    });
+    powerupsRef.current = powerupsRef.current.filter(p => !claimedPowerups.includes(p.id));
+
+    // 2. Enemy/Jet vs Player
+    const checkPlayerCollision = (rect: Rect) => {
+         if (activePokemon.stats.hp > 0 && rectIntersect(rect, playerRect)) {
+             // If Shield Active?
+             if (hasShield) {
+                 AudioService.playShieldHit();
+                 // Reduce shield time by 2s
+                 const newTeam = [...team];
+                 const buff = newTeam[activeIndex].activeBuffs;
+                 if (buff.shieldExpires) {
+                    buff.shieldExpires -= 2000;
+                    if (buff.shieldExpires < Date.now()) buff.shieldExpires = 0;
+                 }
+                 setTeam(newTeam);
+             } else {
+                 handlePlayerDeath();
+             }
+             return true;
+         }
+         return false;
+    };
+
     enemiesRef.current.forEach(e => {
         const eRect = {x: e.x, y: e.y, width: e.width, height: e.height};
-        
-        // Enemy Hits Player -> Instant Game Over
-        if (rectIntersect(eRect, playerRect)) {
-             handlePlayerDeath();
-        }
+        if (checkPlayerCollision(eRect)) return;
 
-        // Enemy Hits Barrier -> Erode barrier
         barriersRef.current.forEach(barrier => {
             barrier.cells.forEach(cell => {
                 if (cell.active && rectIntersect(eRect, cell)) {
@@ -248,21 +448,21 @@ const App: React.FC = () => {
         });
     });
 
-    // Projectile Collisions
+    // 3. Projectiles
     const nextProjectiles: Projectile[] = [];
     const deadEnemies: string[] = [];
+    const deadAcrobats: string[] = [];
 
     projectilesRef.current.forEach(p => {
       let hit = false;
       const pRect = {x: p.x - p.width/2, y: p.y, width: p.width, height: p.height};
 
-      // Check vs Barriers (Cell based)
-      // Optimized: check broad barrier rect first? No, just iterate cells is fine for this scale (32*4 cells)
+      // Check Barriers
       for (const barrier of barriersRef.current) {
          for (const cell of barrier.cells) {
              if (cell.active && rectIntersect(pRect, cell)) {
                  hit = true;
-                 cell.active = false; // Destroy chunk
+                 cell.active = false; 
                  AudioService.playHit(); 
                  break; 
              }
@@ -271,46 +471,165 @@ const App: React.FC = () => {
       }
       
       if (!hit) {
-        if (p.owner === 'player') {
-          // Check vs Enemies
-          for (const enemy of enemiesRef.current) {
-            if (rectIntersect(pRect, enemy)) {
-              hit = true;
-              // Apply Damage
-              const { damage, isEffective, isWeak } = calculateDamage(activePokemon, enemy.pokemon);
-              enemy.pokemon.stats.hp -= damage;
-              AudioService.playHit();
-
-              // Visual feedback could go here
-              if (enemy.pokemon.stats.hp <= 0) {
-                deadEnemies.push(enemy.id);
-                // Trigger explosion visual
-                explosionsRef.current.push({
-                   id: Math.random().toString(),
-                   x: enemy.x + enemy.width / 2,
-                   y: enemy.y + enemy.height / 2,
-                   startTime: time
+        // --- 1. Check vs Enemies / UFO / Acrobats (Targetable by Player OR Neutral) ---
+        if (p.owner === 'player' || p.owner === 'neutral') {
+            
+            // A. Check UFO
+            if (mysteryShipRef.current && rectIntersect(pRect, mysteryShipRef.current)) {
+                hit = true;
+                const dropX = mysteryShipRef.current.x;
+                const dropY = mysteryShipRef.current.y;
+                mysteryShipRef.current = null;
+                AudioService.playExplosion();
+                AudioService.playPowerupSpawn();
+                
+                const types = [PowerUpType.HEALTH, PowerUpType.RAPID, PowerUpType.SPREAD, PowerUpType.SHIELD];
+                const type = types[Math.floor(Math.random() * types.length)];
+                
+                powerupsRef.current.push({
+                    id: uuidv4(),
+                    x: dropX,
+                    y: dropY,
+                    width: 24,
+                    height: 24,
+                    type
                 });
-                handleEnemyDefeat(enemy);
-              }
-              break; 
             }
-          }
-        } else {
-          // Check vs Player
-          if (rectIntersect(pRect, playerRect)) {
-            hit = true;
-             const { damage } = calculateDamage(enemiesRef.current.find(e => e.pokemon.type === p.type)?.pokemon || createPokemon('caterpie'), activePokemon);
-             
-             // Mutate state directly for speed, then force update
-             const newTeam = [...team];
-             newTeam[activeIndex].stats.hp -= damage;
-             setTeam(newTeam);
-             AudioService.playHit();
 
-             if (newTeam[activeIndex].stats.hp <= 0) {
-               handlePlayerDeath();
-             }
+            // B. Check Acrobats
+            if (!hit) {
+                acrobatsRef.current.forEach(jet => {
+                    if (rectIntersect(pRect, jet)) {
+                        hit = true;
+                        deadAcrobats.push(jet.id);
+                        AudioService.playExplosion();
+                        AudioService.playShrapnel();
+                        explosionsRef.current.push({
+                            id: uuidv4(),
+                            x: jet.x, y: jet.y, startTime: time
+                        });
+                        // Spread Shrapnel (8 directions) - NEUTRAL OWNER
+                        for(let i=0; i<8; i++) {
+                            const angle = (Math.PI * 2 * i) / 8;
+                            nextProjectiles.push({
+                                id: uuidv4(),
+                                x: jet.x, y: jet.y,
+                                width: 12, height: 12,
+                                vx: Math.cos(angle) * 300,
+                                vy: Math.sin(angle) * 300,
+                                damage: 20,
+                                type: PokemonType.ROCK,
+                                owner: 'neutral', 
+                                bouncesLeft: 0
+                            });
+                        }
+                    }
+                });
+            }
+
+            // C. Check Standard Enemies
+            if (!hit) {
+              for (const enemy of enemiesRef.current) {
+                if (rectIntersect(pRect, enemy)) {
+                  hit = true;
+                  
+                  let damage = 0;
+                  if (p.owner === 'player') {
+                       const res = calculateDamage(activePokemon, enemy.pokemon);
+                       damage = res.damage;
+                  } else {
+                       // Neutral Damage Logic
+                       const chart = TYPE_CHART[p.type];
+                       let mult = 1;
+                       if (chart.strong.includes(enemy.pokemon.type)) mult = 2;
+                       if (chart.weak.includes(enemy.pokemon.type)) mult = 0.5;
+                       damage = Math.ceil(p.damage * mult);
+                  }
+
+                  enemy.pokemon.stats.hp -= damage;
+                  AudioService.playHit();
+
+                  if (enemy.pokemon.stats.hp <= 0) {
+                    deadEnemies.push(enemy.id);
+                    explosionsRef.current.push({
+                      id: Math.random().toString(),
+                      x: enemy.x + enemy.width / 2,
+                      y: enemy.y + enemy.height / 2,
+                      startTime: time
+                    });
+                    handleEnemyDefeat(enemy);
+                  } else if (p.owner === 'player' && p.bouncesLeft > 0) {
+                    // RICOCHET (Player Only)
+                    let nearest = null;
+                    let minDist = Infinity;
+                    enemiesRef.current.forEach(other => {
+                        if (other.id === enemy.id) return;
+                        const dist = Math.sqrt(Math.pow(other.x - enemy.x, 2) + Math.pow(other.y - enemy.y, 2));
+                        if (dist < 200 && dist < minDist) { 
+                            minDist = dist;
+                            nearest = other;
+                        }
+                    });
+
+                    if (nearest) {
+                        p.bouncesLeft--;
+                        p.owner = 'player';
+                        const dx = nearest.x - enemy.x;
+                        const dy = nearest.y - enemy.y;
+                        const mag = Math.sqrt(dx*dx + dy*dy);
+                        const speed = activePokemon.stats.projectileSpeed;
+                        p.vx = (dx / mag) * speed;
+                        p.vy = (dy / mag) * speed;
+                        p.x = enemy.x; 
+                        p.y = enemy.y;
+                        nextProjectiles.push(p); 
+                        return; 
+                    }
+                  }
+                  break; 
+                }
+              }
+            }
+        }
+
+        // --- 2. Check vs Player (Targetable by Enemy OR Neutral) ---
+        if (!hit && (p.owner === 'enemy' || p.owner === 'neutral')) {
+          if (activePokemon.stats.hp > 0 && rectIntersect(pRect, playerRect)) {
+            hit = true;
+            
+            if (hasShield) {
+                 AudioService.playShieldHit();
+                 // Shield takes the hit
+                 const newTeam = [...team];
+                 const buff = newTeam[activeIndex].activeBuffs;
+                 if (buff.shieldExpires) {
+                    buff.shieldExpires -= 2000; // Lose 2s duration
+                    if (buff.shieldExpires < Date.now()) buff.shieldExpires = 0;
+                 }
+                 setTeam(newTeam);
+            } else {
+                 let damage = 0;
+                 if (p.owner === 'enemy') {
+                    const attacker = enemiesRef.current.find(e => e.pokemon.type === p.type)?.pokemon || createPokemon('caterpie');
+                    damage = calculateDamage(attacker, activePokemon).damage;
+                 } else {
+                    // Neutral vs Player
+                    const chart = TYPE_CHART[p.type];
+                    let mult = 1;
+                    if (chart.strong.includes(activePokemon.type)) mult = 2;
+                    if (chart.weak.includes(activePokemon.type)) mult = 0.5;
+                    damage = Math.ceil(p.damage * mult);
+                 }
+                 
+                 const newTeam = [...team];
+                 newTeam[activeIndex].stats.hp -= damage;
+                 setTeam(newTeam);
+                 AudioService.playHit();
+
+                 if (newTeam[activeIndex].stats.hp <= 0) {
+                   handlePlayerDeath();
+                 }
+            }
           }
         }
       }
@@ -320,17 +639,17 @@ const App: React.FC = () => {
 
     projectilesRef.current = nextProjectiles;
     enemiesRef.current = enemiesRef.current.filter(e => !deadEnemies.includes(e.id));
+    acrobatsRef.current = acrobatsRef.current.filter(j => !deadAcrobats.includes(j.id));
     
-    // 9. Check Wave Clear
+    // Wave Clear
     if (enemiesRef.current.length === 0 && !showBench && gameState.isPlaying) {
-      // Ensure all animations finish? Nah, just go.
       handleWaveComplete();
     }
 
     setGameState(prev => ({ ...prev, lastFrameTime: time }));
-    setRenderTrigger(prev => prev + 1); // Force React Render
+    setRenderTrigger(prev => prev + 1); 
     animationFrameId.current = requestAnimationFrame(update);
-  }, [gameState, activePokemon, team, activeIndex, showBench]); 
+  }, [gameState, activePokemon, team, bench, activeIndex, showBench]); 
 
   const rectIntersect = (r1: {x: number, y: number, width: number, height: number}, r2: {x: number, y: number, width: number, height: number}) => {
     return !(r2.x > r1.x + r1.width || 
@@ -340,7 +659,6 @@ const App: React.FC = () => {
   };
 
   const handleEnemyDefeat = (enemy: Enemy) => {
-    // XP Gain
     const xpGain = enemy.pokemon.level * 10;
     const newTeam = [...team];
     const currentMon = newTeam[activeIndex];
@@ -359,7 +677,6 @@ const App: React.FC = () => {
        currentMon.stats.attack += 2;
        currentMon.stats.speed += 1; 
        
-       // Evolution
        const evolved = checkEvolution(currentMon);
        if (evolved.speciesId !== currentMon.speciesId) {
           newTeam[activeIndex] = evolved;
@@ -372,16 +689,15 @@ const App: React.FC = () => {
     setTeam(newTeam);
     setGameState(prev => ({ ...prev, score: prev.score + (enemy.pokemon.level * 100) }));
 
-    // Capture Logic (20% chance)
+    // Capture Logic
     if (Math.random() < 0.2) {
-       const captured = { ...enemy.pokemon, id: Math.random().toString() }; 
+       const captured = { ...enemy.pokemon, id: uuidv4(), activeBuffs: {} }; 
        captured.stats.hp = Math.floor(captured.stats.maxHp * 0.5);
        
        setBench(prev => [...prev, captured]);
        setGameMessage(`Captured ${captured.name}!`);
        AudioService.playCapture();
        
-       // Spawn Capture Animation
        captureAnimsRef.current.push({
            id: uuidv4(),
            startX: enemy.x,
@@ -397,16 +713,48 @@ const App: React.FC = () => {
   };
 
   const handlePlayerDeath = () => {
-    AudioService.playExplosion();
-    // Check if other pokemon available
-    const aliveMembers = team.filter(p => p.stats.hp > 0);
-    if (aliveMembers.length === 0) {
-      setGameState(prev => ({ ...prev, isGameOver: true, isPlaying: false }));
-    } else {
-      // Auto swap to first alive
-      const nextIdx = team.findIndex(p => p.stats.hp > 0);
-      setActiveIndex(nextIdx);
-    }
+    AudioService.playDeath();
+    
+    const deadMon = team[activeIndex];
+    if (!deadMon) return;
+
+    const deadMonName = deadMon.nickname;
+    setGameMessage(`${deadMonName} has fallen!`);
+    
+    setTimeout(() => {
+        setGameMessage(null);
+
+        const newTeam = [...team];
+        const newBench = [...bench];
+        
+        // Remove dead pokemon
+        newTeam.splice(activeIndex, 1);
+
+        // Pull from bench if available
+        if (newBench.length > 0) {
+            const replacement = newBench.shift();
+            if (replacement) {
+                newTeam.splice(activeIndex, 0, replacement);
+                setBench(newBench);
+                setTeam(newTeam);
+                setGameMessage(`${replacement.nickname} joined the fight!`);
+                setTimeout(() => setGameMessage(null), 1500);
+                return; // Continue playing
+            }
+        } else {
+            // No replacement, check if game over
+            setTeam(newTeam); // Update without the dead one
+        }
+
+        if (newTeam.length === 0) {
+          setGameState(prev => ({ ...prev, isGameOver: true, isPlaying: false }));
+        } else {
+          // Adjust active index if needed
+          if (activeIndex >= newTeam.length) {
+              setActiveIndex(newTeam.length - 1);
+          }
+        }
+    }, 1500);
   };
 
   const handleWaveComplete = () => {
@@ -416,20 +764,24 @@ const App: React.FC = () => {
 
   const handleStartGame = () => {
      AudioService.init(); 
-     setTeam([createPokemon('charmander'), createPokemon('squirtle'), createPokemon('bulbasaur')]);
+     const starters = [createPokemon('charmander'), createPokemon('squirtle'), createPokemon('bulbasaur')];
+     // Initialize buffs
+     starters.forEach(p => p.activeBuffs = {});
+     setTeam(starters);
      setBench([]);
-     setGameState({
+     setGameState(prev => ({
        isPlaying: true,
        isPaused: false,
        isGameOver: false,
        wave: 1,
        score: 0,
-       lastFrameTime: performance.now()
-     });
+       highScore: prev.highScore,
+       lastFrameTime: performance.now(),
+       globalAnimFrame: 0,
+     }));
      startWave(1);
   };
 
-  // Renaming Logic
   const handleRenameRequest = (id: string) => {
     setRenamingId(id);
     if (gameState.isPlaying && !gameState.isGameOver) {
@@ -442,8 +794,6 @@ const App: React.FC = () => {
     setTeam(prev => prev.map(p => p.id === renamingId ? { ...p, nickname: newName } : p));
     setBench(prev => prev.map(p => p.id === renamingId ? { ...p, nickname: newName } : p));
     setRenamingId(null);
-    // Note: We leave the game paused so the user can orient themselves, or we could auto-resume.
-    // Leaving it paused is safer UX.
   };
 
   useEffect(() => {
@@ -453,10 +803,8 @@ const App: React.FC = () => {
     return () => cancelAnimationFrame(animationFrameId.current);
   }, [gameState.isPlaying, gameState.isPaused, gameState.isGameOver, update]);
 
-  // Determine renaming target
   const renamingPokemon = team.find(p => p.id === renamingId) || bench.find(p => p.id === renamingId);
 
-  // --- Render ---
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 p-4 select-none relative">
       
@@ -472,6 +820,7 @@ const App: React.FC = () => {
           </button>
           <div className="mt-8 text-gray-400 text-xs">
             <p>ARROWS to Move • SPACE to Shoot • 1-3 to Swap Pokemon</p>
+            <p className="mt-2 text-yellow-600">HIGH SCORE: {gameState.highScore}</p>
           </div>
         </div>
       )}
@@ -521,7 +870,7 @@ const App: React.FC = () => {
       )}
 
       {/* Gameplay */}
-      {(gameState.isPlaying || showBench) && !gameState.isGameOver && (
+      {(gameState.isPlaying || showBench) && !gameState.isGameOver && team.length > 0 && activePokemon && (
         <>
           <div className="relative">
             <GameCanvas 
@@ -534,6 +883,12 @@ const App: React.FC = () => {
               barriers={barriersRef.current}
               explosions={explosionsRef.current}
               captureAnims={captureAnimsRef.current}
+              particles={particlesRef.current}
+              mysteryShip={mysteryShipRef.current}
+              acrobats={acrobatsRef.current}
+              powerups={powerupsRef.current}
+              globalAnimFrame={gameState.globalAnimFrame}
+              currentTime={gameState.lastFrameTime}
             />
             {gameMessage && (
                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-yellow-300 text-2xl font-bold drop-shadow-md animate-bounce z-50 whitespace-nowrap pointer-events-none">
@@ -547,10 +902,11 @@ const App: React.FC = () => {
              team={team} 
              gameState={gameState}
              onSwap={(idx) => {
-               if(team[idx].stats.hp > 0) setActiveIndex(idx);
+               if(team[idx] && team[idx].stats.hp > 0) setActiveIndex(idx);
              }}
              onPause={togglePause}
              onRequestRename={handleRenameRequest}
+             cooldownProgress={cooldownProgress}
           />
         </>
       )}

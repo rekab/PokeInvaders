@@ -17,6 +17,9 @@ export const createPokemon = (speciesId: string, level: number = 1): Pokemon => 
     maxHp: Math.floor(data.baseStats.hp * scale),
     attack: Math.floor(data.baseStats.attack * scale),
     speed: Math.floor(data.baseStats.speed * scale),
+    fireRate: data.baseStats.fireRate,
+    moveSpeed: data.baseStats.moveSpeed,
+    projectileSpeed: data.baseStats.projectileSpeed,
   };
 
   return {
@@ -26,6 +29,7 @@ export const createPokemon = (speciesId: string, level: number = 1): Pokemon => 
     nickname: data.name, // Default nickname is species name
     type: data.type,
     stats,
+    shootPattern: data.baseStats.shootPattern,
     level,
     xp: 0,
     xpToNextLevel: level * 100,
@@ -33,6 +37,7 @@ export const createPokemon = (speciesId: string, level: number = 1): Pokemon => 
     projectileColor: data.projectileColor,
     evolvesTo: data.evolvesTo,
     evolutionLevel: data.evolutionLevel,
+    activeBuffs: {}
   };
 };
 
@@ -64,6 +69,7 @@ export const checkEvolution = (pokemon: Pokemon): Pokemon => {
     newForm.id = pokemon.id; // Keep same instance ID
     newForm.xp = pokemon.xp; // Keep XP
     newForm.nickname = pokemon.nickname; // Keep nickname
+    newForm.activeBuffs = pokemon.activeBuffs;
     
     // If nickname was default species name, update it to new species name. Otherwise keep custom nickname.
     if (pokemon.nickname === pokemon.name) {
@@ -94,7 +100,8 @@ export const getWaveEnemies = (wave: number, gameWidth: number): Enemy[] => {
        width: 80,
        height: 80,
        pokemon: boss,
-       direction: 1
+       direction: 1,
+       attackFrame: 0
      });
      return enemies;
   }
@@ -112,7 +119,8 @@ export const getWaveEnemies = (wave: number, gameWidth: number): Enemy[] => {
         width: 32,
         height: 32,
         pokemon: mon,
-        direction: 1
+        direction: 1,
+        attackFrame: 0
       });
     }
   }

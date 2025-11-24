@@ -1,3 +1,4 @@
+
 // Simple Synth-based Audio Service for Retro SFX
 
 let audioCtx: AudioContext | null = null;
@@ -43,7 +44,7 @@ const playTone = (
   osc.stop(audioCtx.currentTime + duration);
 };
 
-const playNoise = (duration: number) => {
+const playNoise = (duration: number, lowPass: boolean = false) => {
   if (!audioCtx || !masterGain) return;
   
   const bufferSize = audioCtx.sampleRate * duration;
@@ -58,11 +59,22 @@ const playNoise = (duration: number) => {
   noise.buffer = buffer;
   
   const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+  gain.gain.setValueAtTime(lowPass ? 0.5 : 0.2, audioCtx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
   
   noise.connect(gain);
-  gain.connect(masterGain);
+
+  if (lowPass) {
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1000, audioCtx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + duration);
+    gain.connect(filter);
+    filter.connect(masterGain);
+  } else {
+    gain.connect(masterGain);
+  }
+  
   noise.start();
 };
 
@@ -93,10 +105,28 @@ export const AudioService = {
     playNoise(0.1);
   },
 
+  playShieldHit: () => {
+    initAudio();
+    playTone(800, 'sine', 0.1, 0.2, 600); // Deflect sound
+  },
+
   playExplosion: () => {
     initAudio();
-    playNoise(0.3);
-    playTone(100, 'sawtooth', 0.3, 0.2, 20);
+    // Crunchier explosion using lowpass noise
+    playNoise(0.4, true);
+    playTone(50, 'sawtooth', 0.4, 0.2, 10); // Sub-bass impact
+  },
+
+  playShrapnel: () => {
+    initAudio();
+    playNoise(0.2);
+    playTone(300, 'sawtooth', 0.2, 0.1, 100);
+  },
+
+  playDeath: () => {
+    initAudio();
+    playTone(150, 'sawtooth', 0.8, 0.2, 50);
+    setTimeout(() => playNoise(0.5), 200);
   },
 
   playEvolve: () => {
@@ -112,5 +142,28 @@ export const AudioService = {
     initAudio();
     playTone(880, 'sine', 0.1, 0.1);
     setTimeout(() => playTone(1100, 'sine', 0.1, 0.1), 150);
+  },
+
+  playUFO: () => {
+    initAudio();
+    // Woo-woo sound
+    playTone(600, 'sine', 0.2, 0.05, 800);
+    setTimeout(() => playTone(800, 'sine', 0.2, 0.05, 600), 200);
+  },
+
+  playJetEngine: () => {
+    initAudio();
+    playTone(100, 'sawtooth', 0.3, 0.05, 150);
+  },
+
+  playPowerupSpawn: () => {
+    initAudio();
+    playTone(1000, 'square', 0.3, 0.1, 500);
+  },
+
+  playPowerupCollect: () => {
+    initAudio();
+    playTone(600, 'triangle', 0.1, 0.1, 1200);
+    setTimeout(() => playTone(1200, 'triangle', 0.2, 0.1, 1800), 100);
   }
 };

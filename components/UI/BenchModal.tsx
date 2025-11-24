@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { Pokemon, PokemonType } from '../../types';
-import { getStrategicAdvice } from '../../services/geminiService';
+import { PixelSprite } from '../Visuals';
 
 interface BenchModalProps {
   team: Pokemon[];
@@ -14,15 +15,6 @@ interface BenchModalProps {
 
 const BenchModal: React.FC<BenchModalProps> = ({ team, bench, nextWaveTypes, onContinue, onSwapMember, onRequestRename }) => {
   const [selectedTeamIndex, setSelectedTeamIndex] = useState<number | null>(null);
-  const [advice, setAdvice] = useState<string>("");
-  const [loadingAdvice, setLoadingAdvice] = useState(false);
-
-  const handleFetchAdvice = async () => {
-    setLoadingAdvice(true);
-    const text = await getStrategicAdvice(team, bench, nextWaveTypes);
-    setAdvice(text);
-    setLoadingAdvice(false);
-  };
 
   const handleRenameClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -46,7 +38,9 @@ const BenchModal: React.FC<BenchModalProps> = ({ team, bench, nextWaveTypes, onC
                 onClick={() => setSelectedTeamIndex(selectedTeamIndex === idx ? null : idx)}
               >
                 <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 ${poke.spriteColor}`}></div>
+                  <div className="w-10 h-10 relative">
+                     <PixelSprite speciesId={poke.speciesId} />
+                  </div>
                   <div>
                     <div 
                       className="font-bold text-sm flex items-center gap-2 group"
@@ -88,7 +82,9 @@ const BenchModal: React.FC<BenchModalProps> = ({ team, bench, nextWaveTypes, onC
                 }}
               >
                  <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 ${poke.spriteColor}`}></div>
+                  <div className="w-8 h-8 relative">
+                    <PixelSprite speciesId={poke.speciesId} />
+                  </div>
                   <div>
                     <div 
                         className="text-xs font-bold flex items-center gap-2 group"
@@ -103,30 +99,14 @@ const BenchModal: React.FC<BenchModalProps> = ({ team, bench, nextWaveTypes, onC
                     <p className="text-[10px] text-gray-400">{poke.name} • {poke.type}</p>
                   </div>
                 </div>
-                <div className="text-[10px] text-green-400">
-                   HP {poke.stats.hp}/{poke.stats.maxHp}
+                <div className="text-right">
+                   <div className="text-[10px] text-green-400">HP {poke.stats.hp}/{poke.stats.maxHp}</div>
+                   <div className="text-[10px] text-red-400">ATK {poke.stats.attack}</div>
                 </div>
               </div>
             ))}
           </div>
         </div>
-      </div>
-
-      {/* Advice Section */}
-      <div className="mt-8 w-full max-w-4xl bg-gray-800 p-4 rounded border border-purple-500">
-        <div className="flex justify-between items-center mb-2">
-           <h4 className="text-purple-400 text-sm font-bold">PROFESSOR GEMINI'S ADVICE</h4>
-           <button 
-             onClick={handleFetchAdvice}
-             disabled={loadingAdvice}
-             className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-[10px] rounded disabled:opacity-50"
-           >
-             {loadingAdvice ? 'ANALYZING...' : 'ASK ADVICE'}
-           </button>
-        </div>
-        <p className="text-xs text-gray-300 italic min-h-[40px]">
-          {advice || `Upcoming enemies include: ${Array.from(new Set(nextWaveTypes)).join(', ')}. Use the button to analyze type effectiveness.`}
-        </p>
       </div>
 
       <button 

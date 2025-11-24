@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 
 interface RenameModalProps {
@@ -27,7 +28,7 @@ const RenameModal: React.FC<RenameModalProps> = ({ currentName, onConfirm, onCan
 
   return (
     <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[150]">
-      <div className="bg-slate-800 border-4 border-slate-600 p-6 rounded-lg shadow-2xl w-full max-w-md animate-flicker">
+      <div className="bg-slate-800 border-4 border-slate-600 p-6 rounded-lg shadow-2xl w-full max-w-md">
         <h2 className="text-xl text-yellow-400 mb-4 font-bold text-center">RENAME POKEMON</h2>
         
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">

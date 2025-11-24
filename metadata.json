@@ -1,5 +1,5 @@
 {
   "name": "PokeInvaders",
-  "description": "A retro-style arcade game combining Pokemon mechanics with Space Invaders. Capture enemies, evolve your team, and defend against waves of descending types. Features a Gemini-powered Strategy Advisor.",
+  "description": "A retro-style arcade game combining Pokemon mechanics with Space Invaders. Capture enemies, evolve your team, and defend against waves of descending types.",
   "requestFramePermissions": []
 }
