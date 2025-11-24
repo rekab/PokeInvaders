@@ -1,3 +1,4 @@
+
 export enum PokemonType {
   NORMAL = 'Normal',
   FIRE = 'Fire',
@@ -44,14 +45,21 @@ export interface Enemy {
   direction: 1 | -1; // 1 = right, -1 = left
 }
 
+export interface BarrierCell {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  active: boolean;
+}
+
 export interface Barrier {
   id: string;
   x: number;
   y: number;
   width: number;
   height: number;
-  hp: number;
-  maxHp: number;
+  cells: BarrierCell[];
 }
 
 export interface Explosion {
@@ -59,6 +67,16 @@ export interface Explosion {
   x: number;
   y: number;
   startTime: number;
+}
+
+export interface CaptureAnim {
+  id: string;
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+  progress: number; // 0 to 1
+  pokemon: Pokemon;
 }
 
 export interface Projectile {

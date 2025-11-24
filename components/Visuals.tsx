@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 import { PokemonType } from '../types';
 
@@ -331,24 +332,6 @@ const SPRITE_DATA: Record<string, (string | null)[][]> = {
     [C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._],
     [C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._],
   ],
-  'barrier': [
-    [C._,C._,C._,C.A,C.A,C.A,C.A,C.A,C.A,C.A,C.A,C.A,C.A,C._,C._,C._],
-    [C._,C._,C.A,C.A,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.A,C.A,C._,C._],
-    [C._,C.A,C.S,C.S,C.S,C.A,C.A,C.S,C.S,C.S,C.S,C.S,C.S,C.A,C._,C._],
-    [C._,C.A,C.S,C.S,C.S,C.A,C.A,C.S,C.S,C.S,C.S,C.S,C.S,C.A,C._,C._],
-    [C.A,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.A,C._],
-    [C.A,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.A,C._],
-    [C.A,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.A,C._],
-    [C.A,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.A,C._],
-    [C.A,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.A,C._],
-    [C.A,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.S,C.A,C._],
-    [C.A,C.S,C.S,C.S,C.A,C.A,C.A,C.A,C.A,C.A,C.S,C.S,C.S,C.S,C.A,C._],
-    [C.A,C.S,C.S,C.A,C.A,C._,C._,C._,C._,C.A,C.A,C.S,C.S,C.S,C.A,C._],
-    [C.A,C.S,C.A,C.A,C._,C._,C._,C._,C._,C._,C.A,C.A,C.S,C.S,C.A,C._],
-    [C.A,C.A,C.A,C._,C._,C._,C._,C._,C._,C._,C._,C.A,C.A,C.A,C.A,C._],
-    [C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._],
-    [C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._,C._],
-  ],
 };
 
 const GENERIC_MAP = [
@@ -409,6 +392,15 @@ export const PixelSprite: React.FC<{ speciesId: string }> = ({ speciesId }) => {
     />
   );
 };
+
+export const PokeballSprite: React.FC = () => {
+    return (
+        <div className="w-4 h-4 rounded-full border border-black relative bg-white overflow-hidden animate-spin">
+            <div className="absolute top-0 w-full h-1/2 bg-red-600 border-b border-black"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full border border-black z-10"></div>
+        </div>
+    );
+}
 
 // Helper to map type to colors
 const getTypeColor = (type: PokemonType): string => {

@@ -1,15 +1,17 @@
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { 
   GAME_WIDTH, GAME_HEIGHT, PLAYER_WIDTH, PLAYER_SPEED, 
   BASE_ENEMY_SPEED, ENEMY_DROP_DISTANCE, PROJECTILE_HEIGHT, PROJECTILE_WIDTH, ENEMY_HEIGHT, ENEMY_WIDTH, POKEDEX 
 } from './constants';
-import { Pokemon, Enemy, Projectile, GameState, PokemonType, Barrier, Explosion } from './types';
+import { Pokemon, Enemy, Projectile, GameState, PokemonType, Barrier, Explosion, CaptureAnim } from './types';
 import { createPokemon, getWaveEnemies, calculateDamage, checkEvolution, generateBarriers } from './services/gameLogic';
 import { AudioService } from './services/audioService';
 import GameCanvas from './components/GameCanvas';
 import HUD from './components/UI/HUD';
 import BenchModal from './components/UI/BenchModal';
 import RenameModal from './components/UI/RenameModal';
+import { v4 as uuidv4 } from 'uuid';
 
 const App: React.FC = () => {
   // --- Game State ---
@@ -39,6 +41,7 @@ const App: React.FC = () => {
   const projectilesRef = useRef<Projectile[]>([]);
   const barriersRef = useRef<Barrier[]>([]);
   const explosionsRef = useRef<Explosion[]>([]);
+  const captureAnimsRef = useRef<CaptureAnim[]>([]);
   const keysPressed = useRef<Record<string, boolean>>({});
   const lastShotTime = useRef(0);
   const animationFrameId = useRef<number>(0);
@@ -79,9 +82,10 @@ const App: React.FC = () => {
   const startWave = useCallback((waveNum: number) => {
     enemiesRef.current = getWaveEnemies(waveNum, GAME_WIDTH);
     projectilesRef.current = [];
-    // Only spawn barriers on wave 1, or randomly on subsequent waves
+    // Always regenerate barriers fully at start of wave
     barriersRef.current = generateBarriers(GAME_WIDTH, waveNum);
     explosionsRef.current = [];
+    captureAnimsRef.current = [];
     
     playerXRef.current = GAME_WIDTH / 2;
     setGameState(prev => ({ ...prev, wave: waveNum, isPlaying: true }));
@@ -143,7 +147,12 @@ const App: React.FC = () => {
     // 3. Enemy Logic
     let hitWall = false;
     enemiesRef.current.forEach(enemy => {
-      enemy.x += (BASE_ENEMY_SPEED + (gameState.wave * 5)) * enemy.direction * dt;
+      // ACCELERATION LOGIC: Base + (Wave * 5) + (Y position factor)
+      // The lower they get, the faster they move horizontally
+      const verticalBoost = (enemy.y / GAME_HEIGHT) * 100; // Up to +100 speed at bottom
+      const moveSpeed = BASE_ENEMY_SPEED + (gameState.wave * 5) + verticalBoost;
+      
+      enemy.x += moveSpeed * enemy.direction * dt;
       
       // Random enemy shooting
       if (Math.random() < 0.001 * gameState.wave) {
@@ -187,15 +196,56 @@ const App: React.FC = () => {
     // 6. Cleanup Explosions
     explosionsRef.current = explosionsRef.current.filter(e => time - e.startTime < 500); // 500ms duration
 
-    // 7. Collision Detection
-    // Player vs Enemy Bullets
+    // 7. Update Capture Animations
+    const activeAnims: CaptureAnim[] = [];
+    captureAnimsRef.current.forEach(anim => {
+        // Simple Lerp to Bench Target (Bottom Right approx x:700, y:550)
+        const targetX = GAME_WIDTH - 100;
+        const targetY = GAME_HEIGHT + 50; // Off screen bottom
+
+        anim.progress += dt * 1.5; // 1.5 speed multiplier
+        
+        if (anim.progress < 1) {
+            // Parabolic Arc
+            const linearX = anim.startX + (targetX - anim.startX) * anim.progress;
+            const linearY = anim.startY + (targetY - anim.startY) * anim.progress;
+            // Add slight curve
+            const height = 100 * Math.sin(anim.progress * Math.PI); 
+            
+            anim.currentX = linearX;
+            anim.currentY = linearY - height;
+            
+            activeAnims.push(anim);
+        } else {
+            // Animation Done - Actually add to bench state here if we wanted to be precise, 
+            // but we added it earlier for responsiveness.
+        }
+    });
+    captureAnimsRef.current = activeAnims;
+
+
+    // 8. Collision Detection
+    // Player Rect
     const playerRect = { x: playerXRef.current - PLAYER_WIDTH/2, y: GAME_HEIGHT - 50, width: PLAYER_WIDTH, height: PLAYER_WIDTH };
     
-    // Check Enemy hitting player body (Game Over condition usually)
+    // Enemy vs Player BODY and Enemy vs Barrier BODY
     enemiesRef.current.forEach(e => {
-        if (rectIntersect({x: e.x, y: e.y, width: e.width, height: e.height}, playerRect)) {
+        const eRect = {x: e.x, y: e.y, width: e.width, height: e.height};
+        
+        // Enemy Hits Player -> Instant Game Over
+        if (rectIntersect(eRect, playerRect)) {
              handlePlayerDeath();
         }
+
+        // Enemy Hits Barrier -> Erode barrier
+        barriersRef.current.forEach(barrier => {
+            barrier.cells.forEach(cell => {
+                if (cell.active && rectIntersect(eRect, cell)) {
+                    cell.active = false;
+                    AudioService.playHit();
+                }
+            });
+        });
     });
 
     // Projectile Collisions
@@ -204,17 +254,20 @@ const App: React.FC = () => {
 
     projectilesRef.current.forEach(p => {
       let hit = false;
-      
       const pRect = {x: p.x - p.width/2, y: p.y, width: p.width, height: p.height};
 
-      // Check vs Barriers (Both player and enemy projectiles hit barriers)
+      // Check vs Barriers (Cell based)
+      // Optimized: check broad barrier rect first? No, just iterate cells is fine for this scale (32*4 cells)
       for (const barrier of barriersRef.current) {
-         if (rectIntersect(pRect, barrier)) {
-             hit = true;
-             barrier.hp -= p.damage;
-             AudioService.playHit(); // Using simple hit sound for barriers
-             break; // Projectile destroyed
+         for (const cell of barrier.cells) {
+             if (cell.active && rectIntersect(pRect, cell)) {
+                 hit = true;
+                 cell.active = false; // Destroy chunk
+                 AudioService.playHit(); 
+                 break; 
+             }
          }
+         if (hit) break;
       }
       
       if (!hit) {
@@ -267,11 +320,10 @@ const App: React.FC = () => {
 
     projectilesRef.current = nextProjectiles;
     enemiesRef.current = enemiesRef.current.filter(e => !deadEnemies.includes(e.id));
-    // Remove broken barriers
-    barriersRef.current = barriersRef.current.filter(b => b.hp > 0);
-
-    // 8. Check Wave Clear
+    
+    // 9. Check Wave Clear
     if (enemiesRef.current.length === 0 && !showBench && gameState.isPlaying) {
+      // Ensure all animations finish? Nah, just go.
       handleWaveComplete();
     }
 
@@ -324,9 +376,22 @@ const App: React.FC = () => {
     if (Math.random() < 0.2) {
        const captured = { ...enemy.pokemon, id: Math.random().toString() }; 
        captured.stats.hp = Math.floor(captured.stats.maxHp * 0.5);
+       
        setBench(prev => [...prev, captured]);
        setGameMessage(`Captured ${captured.name}!`);
        AudioService.playCapture();
+       
+       // Spawn Capture Animation
+       captureAnimsRef.current.push({
+           id: uuidv4(),
+           startX: enemy.x,
+           startY: enemy.y,
+           currentX: enemy.x,
+           currentY: enemy.y,
+           progress: 0,
+           pokemon: captured
+       });
+
        setTimeout(() => setGameMessage(null), 2000);
     }
   };
@@ -468,6 +533,7 @@ const App: React.FC = () => {
               projectiles={projectilesRef.current}
               barriers={barriersRef.current}
               explosions={explosionsRef.current}
+              captureAnims={captureAnimsRef.current}
             />
             {gameMessage && (
                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-yellow-300 text-2xl font-bold drop-shadow-md animate-bounce z-50 whitespace-nowrap pointer-events-none">

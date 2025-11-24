@@ -1,5 +1,6 @@
-import { Pokemon, PokemonType, Stats, Enemy, Barrier } from "../types";
-import { POKEDEX, TYPE_CHART, BARRIER_WIDTH, BARRIER_HEIGHT, GAME_HEIGHT } from "../constants";
+
+import { Pokemon, PokemonType, Stats, Enemy, Barrier, BarrierCell } from "../types";
+import { POKEDEX, TYPE_CHART, BARRIER_WIDTH, BARRIER_HEIGHT, BARRIER_ROWS, BARRIER_COLS, BARRIER_CELL_SIZE, GAME_HEIGHT } from "../constants";
 import { v4 as uuidv4 } from 'uuid';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -65,10 +66,6 @@ export const checkEvolution = (pokemon: Pokemon): Pokemon => {
     newForm.nickname = pokemon.nickname; // Keep nickname
     
     // If nickname was default species name, update it to new species name. Otherwise keep custom nickname.
-    // Simple check: if old nickname == old species name, update. 
-    // But we don't have old species name handy here easily without looking it up or storing it.
-    // For now, let's just keep the nickname. If the user named it "Charmander" it stays "Charmander" when Charmeleon. 
-    // This is how it works in main games usually unless you didn't nickname it.
     if (pokemon.nickname === pokemon.name) {
         newForm.nickname = newForm.name;
     }
@@ -123,24 +120,43 @@ export const getWaveEnemies = (wave: number, gameWidth: number): Enemy[] => {
 };
 
 export const generateBarriers = (gameWidth: number, wave: number): Barrier[] => {
-    // Spawn barriers roughly every 3rd wave or randomly
+    // Spawn barriers every wave
     const barriers: Barrier[] = [];
     const count = 3;
     const gap = gameWidth / (count + 1);
     
-    // 30% chance of barriers appearing, or guaranteed on wave 1 for tutorial feel
-    if (wave === 1 || Math.random() < 0.3) {
-        for(let i=1; i<=count; i++) {
-            barriers.push({
-                id: generateId(),
-                x: (gap * i) - (BARRIER_WIDTH/2),
-                y: GAME_HEIGHT - 120, // 120px from bottom (above player)
-                width: BARRIER_WIDTH,
-                height: BARRIER_HEIGHT,
-                hp: 200 + (wave * 50),
-                maxHp: 200 + (wave * 50)
-            });
+    for(let i=1; i<=count; i++) {
+        const barrierX = (gap * i) - (BARRIER_WIDTH/2);
+        const barrierY = GAME_HEIGHT - 120;
+        
+        const cells: BarrierCell[] = [];
+        
+        for(let row = 0; row < BARRIER_ROWS; row++) {
+            for(let col = 0; col < BARRIER_COLS; col++) {
+                // Create a "Bunker" shape by skipping corners on top row
+                if (row === 0 && (col === 0 || col === BARRIER_COLS - 1)) continue;
+                // Create arch at bottom
+                if (row === BARRIER_ROWS - 1 && (col > 2 && col < 5)) continue;
+
+                cells.push({
+                    x: barrierX + (col * BARRIER_CELL_SIZE),
+                    y: barrierY + (row * BARRIER_CELL_SIZE),
+                    width: BARRIER_CELL_SIZE,
+                    height: BARRIER_CELL_SIZE,
+                    active: true
+                });
+            }
         }
+
+        barriers.push({
+            id: generateId(),
+            x: barrierX,
+            y: barrierY,
+            width: BARRIER_WIDTH,
+            height: BARRIER_HEIGHT,
+            cells
+        });
     }
+
     return barriers;
 };

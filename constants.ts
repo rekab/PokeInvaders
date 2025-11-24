@@ -1,3 +1,4 @@
+
 import { PokemonType, Pokemon } from './types';
 
 export const GAME_WIDTH = 800;
@@ -7,8 +8,14 @@ export const PLAYER_WIDTH = 48;
 export const PLAYER_HEIGHT = 48;
 export const ENEMY_WIDTH = 40; 
 export const ENEMY_HEIGHT = 40;
-export const BARRIER_WIDTH = 48;
-export const BARRIER_HEIGHT = 32;
+
+// Barrier Grid Config
+export const BARRIER_ROWS = 4;
+export const BARRIER_COLS = 8;
+export const BARRIER_CELL_SIZE = 12; // 8 cols * 12 = 96px width
+export const BARRIER_WIDTH = BARRIER_COLS * BARRIER_CELL_SIZE;
+export const BARRIER_HEIGHT = BARRIER_ROWS * BARRIER_CELL_SIZE;
+
 export const PROJECTILE_WIDTH = 16;
 export const PROJECTILE_HEIGHT = 24; 
 export const PLAYER_SPEED = 300; // px per second

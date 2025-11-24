@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Pokemon, GameState } from '../../types';
 import { PixelSprite } from '../Visuals';
@@ -97,20 +98,32 @@ const HUD: React.FC<HUDProps> = ({ activePokemon, team, gameState, onSwap, onPau
           ))}
         </div>
 
-        {/* Controls / Pause */}
-        <div className="flex flex-col items-end gap-2">
-            <button 
-              onClick={onPause}
-              className="w-10 h-10 bg-gray-800 border-2 border-gray-600 rounded flex items-center justify-center hover:bg-gray-700 hover:border-white transition-colors"
-              title="Pause Game (P)"
-            >
-              {gameState.isPaused ? (
-                 <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-              ) : (
-                 <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-              )}
-            </button>
-            <p className="text-[9px] text-gray-500">ARROWS TO MOVE • SPACE TO SHOOT</p>
+        {/* Bench / Controls / Pause */}
+        <div className="flex items-end gap-4">
+             {/* Visual target for capture animation */}
+             <div className="flex flex-col items-center justify-end text-xs text-gray-500" id="bench-target">
+                 <span className="mb-1">BENCH</span>
+                 <div className="w-10 h-10 border-2 border-gray-600 rounded bg-gray-800 flex items-center justify-center">
+                     <div className="w-6 h-6 rounded-full border border-gray-500 bg-gray-700 flex items-center justify-center">
+                         <div className="w-4 h-0.5 bg-black"></div>
+                     </div>
+                 </div>
+             </div>
+
+             <div className="flex flex-col items-end gap-2">
+                <button 
+                  onClick={onPause}
+                  className="w-10 h-10 bg-gray-800 border-2 border-gray-600 rounded flex items-center justify-center hover:bg-gray-700 hover:border-white transition-colors"
+                  title="Pause Game (P)"
+                >
+                  {gameState.isPaused ? (
+                     <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                  ) : (
+                     <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                  )}
+                </button>
+                <p className="text-[9px] text-gray-500">ARROWS TO MOVE • SPACE TO SHOOT</p>
+            </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
+
 import React from 'react';
-import { Enemy, Pokemon, Projectile, Barrier, Explosion } from '../types';
-import { PixelSprite, ProjectileVisual, ExplosionVisual } from './Visuals';
+import { Enemy, Pokemon, Projectile, Barrier, Explosion, CaptureAnim } from '../types';
+import { PixelSprite, ProjectileVisual, ExplosionVisual, PokeballSprite } from './Visuals';
 
 interface GameCanvasProps {
   width: number;
@@ -11,9 +12,10 @@ interface GameCanvasProps {
   projectiles: Projectile[];
   barriers: Barrier[];
   explosions?: Explosion[];
+  captureAnims?: CaptureAnim[];
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ width, height, player, playerX, enemies, projectiles, barriers, explosions = [] }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ width, height, player, playerX, enemies, projectiles, barriers, explosions = [], captureAnims = [] }) => {
   return (
     <div 
       className="relative bg-slate-900 border-4 border-slate-700 rounded-lg overflow-hidden shadow-2xl"
@@ -36,21 +38,23 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ width, height, player, playerX,
 
       {/* Barriers */}
       {barriers.map(barrier => (
-        <div
-          key={barrier.id}
-          className="absolute z-10 transition-opacity"
-          style={{
-            left: barrier.x,
-            top: barrier.y,
-            width: barrier.width,
-            height: barrier.height,
-            opacity: barrier.hp / barrier.maxHp
-          }}
-        >
-          {/* Simple damage shake effect */}
-          <div className={barrier.hp < barrier.maxHp * 0.5 ? 'animate-wobble' : ''}>
-             <PixelSprite speciesId="barrier" />
-          </div>
+        <div key={barrier.id}>
+            {barrier.cells.map((cell, idx) => (
+                cell.active && (
+                    <div
+                        key={`${barrier.id}-cell-${idx}`}
+                        className="absolute z-10 bg-green-500 shadow-sm shadow-green-900"
+                        style={{
+                            left: cell.x,
+                            top: cell.y,
+                            width: cell.width,
+                            height: cell.height,
+                            borderRadius: '2px', // Slight rounding
+                            opacity: 0.9
+                        }}
+                    ></div>
+                )
+            ))}
         </div>
       ))}
 
@@ -111,6 +115,21 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ width, height, player, playerX,
         >
           <ExplosionVisual />
         </div>
+      ))}
+
+      {/* Capture Animations */}
+      {captureAnims.map(anim => (
+          <div 
+            key={anim.id}
+            className="absolute z-50 pointer-events-none"
+            style={{
+                left: anim.currentX,
+                top: anim.currentY,
+                transform: `scale(${1 - (anim.progress * 0.5)})` // Shrink slightly as it travels
+            }}
+          >
+              <PokeballSprite />
+          </div>
       ))}
 
       {/* Projectiles */}
