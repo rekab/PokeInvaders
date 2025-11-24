@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PokeInvaders</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+      body {
+        font-family: 'Press Start 2P', cursive; /* Retro gaming font */
+        background-color: #0f172a;
+        color: white;
+        overflow: hidden;
+      }
+      /* Custom scrollbar for bench list */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1e293b;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #475569;
+        border-radius: 4px;
+      }
+
+      /* Attack Animations */
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes flicker {
+        0% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.8; transform: scale(1.1); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+      @keyframes wobble {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-2px) rotate(-5deg); }
+        75% { transform: translateX(2px) rotate(5deg); }
+      }
+      @keyframes pulse-glow {
+        0% { filter: drop-shadow(0 0 2px currentColor); }
+        50% { filter: drop-shadow(0 0 8px currentColor); }
+        100% { filter: drop-shadow(0 0 2px currentColor); }
+      }
+
+      .animate-spin-fast {
+        animation: spin 0.5s linear infinite;
+      }
+      .animate-flicker {
+        animation: flicker 0.1s linear infinite;
+      }
+      .animate-wobble {
+        animation: wobble 0.5s ease-in-out infinite;
+      }
+      .animate-pulse-glow {
+        animation: pulse-glow 1s infinite;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
