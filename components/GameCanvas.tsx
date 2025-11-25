@@ -8,6 +8,7 @@ interface GameCanvasProps {
   height: number;
   player: Pokemon;
   playerX: number;
+  playerY: number;
   enemies: Enemy[];
   projectiles: Projectile[];
   barriers: Barrier[];
@@ -22,7 +23,7 @@ interface GameCanvasProps {
 }
 
 const GameCanvas: React.FC<GameCanvasProps> = ({ 
-    width, height, player, playerX, enemies, projectiles, barriers, 
+    width, height, player, playerX, playerY, enemies, projectiles, barriers, 
     explosions = [], captureAnims = [], particles = [], mysteryShip, powerups = [], acrobats = [], globalAnimFrame, currentTime
 }) => {
   
@@ -136,9 +137,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
       {/* Player */}
       <div
-        className={`absolute bottom-4 z-10 transition-transform duration-75 ${player.stats.hp <= 0 ? 'scale-0 rotate-180 opacity-0 transition-all duration-1000 ease-out' : ''}`}
+        className={`absolute z-10 transition-transform duration-75 ${player.stats.hp <= 0 ? 'scale-0 rotate-180 opacity-0 transition-all duration-1000 ease-out' : ''}`}
         style={{
           left: playerX,
+          top: playerY,
           width: 48,
           height: 48,
           transform: 'translateX(-50%)', 

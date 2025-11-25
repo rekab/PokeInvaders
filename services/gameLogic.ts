@@ -81,7 +81,7 @@ export const checkEvolution = (pokemon: Pokemon): Pokemon => {
   return pokemon;
 };
 
-export const getWaveEnemies = (wave: number, gameWidth: number): Enemy[] => {
+export const getWaveEnemies = (wave: number, gameWidth: number, hpMultiplier: number = 1.0): Enemy[] => {
   const enemies: Enemy[] = [];
   const rows = Math.min(5, 2 + Math.floor(wave / 2));
   const cols = Math.min(8, 4 + Math.floor(wave / 3));
@@ -93,6 +93,10 @@ export const getWaveEnemies = (wave: number, gameWidth: number): Enemy[] => {
   if (wave % 5 === 0) {
      const bossSpecies = ['mewtwo', 'charizard', 'blastoise', 'venusaur'][Math.floor(Math.random() * 4)];
      const boss = createPokemon(bossSpecies, wave + 2);
+     // Apply Difficulty Multiplier to Boss HP
+     boss.stats.maxHp = Math.floor(boss.stats.maxHp * hpMultiplier);
+     boss.stats.hp = boss.stats.maxHp;
+
      enemies.push({
        id: generateId(),
        x: gameWidth / 2 - 40, // Centered
@@ -112,6 +116,10 @@ export const getWaveEnemies = (wave: number, gameWidth: number): Enemy[] => {
       const randomSpecies = availableTypes[Math.floor(Math.random() * availableTypes.length)];
       const mon = createPokemon(randomSpecies, Math.max(1, wave - 1));
       
+      // Apply Difficulty Multiplier to Enemy HP
+      mon.stats.maxHp = Math.floor(mon.stats.maxHp * hpMultiplier);
+      mon.stats.hp = mon.stats.maxHp;
+
       enemies.push({
         id: generateId(),
         x: 50 + (c * 60),
@@ -135,7 +143,11 @@ export const generateBarriers = (gameWidth: number, wave: number): Barrier[] => 
     
     for(let i=1; i<=count; i++) {
         const barrierX = (gap * i) - (BARRIER_WIDTH/2);
-        const barrierY = GAME_HEIGHT - 120;
+        
+        // MOVED UP significantly to allow player movement space below
+        // Game Height 600. Player safe zone ~150-200px at bottom. 
+        // Move barriers to y=380 (approx)
+        const barrierY = GAME_HEIGHT - 220;
         
         const cells: BarrierCell[] = [];
         

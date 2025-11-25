@@ -542,13 +542,18 @@ export const PixelSprite: React.FC<{ speciesId: string; pose?: string }> = ({ sp
           
           let drawY = y;
           // Simple procedural animation for 'pose'
+          // We target pixels at the outer edges (x <= 3 or x >= 12) to simulate arms/legs moving
+          const isOuter = x <= 3 || x >= 12;
+
           if (pose === 'move_1') {
-            // Bob up
-             if (x === 0 || x === 15) drawY = y - 1; 
+            // Arms Up
+             if (isOuter) drawY = y - 1; 
           } else if (pose === 'move_2') {
-             if (x === 0 || x === 15) drawY = y + 1; 
+             // Arms Down / Neutral
+             if (isOuter) drawY = y; 
           } else if (pose === 'attack') {
-             if (x > 4 && x < 12) drawY = y - 1;
+             // Shake / Lunge
+             if (x > 4 && x < 12) drawY = y + 1;
           }
 
           ctx.fillRect(x, drawY, 1, 1);

@@ -1,5 +1,5 @@
 
-import { PokemonType, Pokemon, ShootPattern } from './types';
+import { PokemonType, Pokemon, ShootPattern, Difficulty } from './types';
 
 export const GAME_WIDTH = 800;
 export const GAME_HEIGHT = 600;
@@ -22,6 +22,14 @@ export const PLAYER_SPEED = 300; // px per second
 export const BASE_ENEMY_SPEED = 50;
 export const ENEMY_DROP_DISTANCE = 20;
 
+export const DIFFICULTY_CONFIG: Record<Difficulty, { label: string, hpMult: number, speedMult: number, fireRateMult: number, scoreMult: number, color: string }> = {
+  [Difficulty.REALLY_EASY]: { label: 'REALLY EASY', hpMult: 0.5, speedMult: 0.5, fireRateMult: 0.3, scoreMult: 0.5, color: 'text-green-400' },
+  [Difficulty.EASY]: { label: 'EASY', hpMult: 0.8, speedMult: 0.8, fireRateMult: 0.7, scoreMult: 0.8, color: 'text-teal-400' },
+  [Difficulty.MIDDLE]: { label: 'MIDDLE', hpMult: 1.0, speedMult: 1.0, fireRateMult: 1.0, scoreMult: 1.0, color: 'text-yellow-400' },
+  [Difficulty.DIFFICULT]: { label: 'DIFFICULT', hpMult: 1.5, speedMult: 1.3, fireRateMult: 1.5, scoreMult: 2.0, color: 'text-orange-500' },
+  [Difficulty.SUPER_DIFFICULT]: { label: 'SUPER DIFFICULT', hpMult: 2.5, speedMult: 1.8, fireRateMult: 3.0, scoreMult: 5.0, color: 'text-red-600' }
+};
+
 export const TYPE_CHART: Record<PokemonType, { strong: PokemonType[]; weak: PokemonType[] }> = {
   [PokemonType.NORMAL]: { strong: [], weak: [] }, 
   [PokemonType.FIRE]: { strong: [PokemonType.GRASS, PokemonType.BUG], weak: [PokemonType.WATER, PokemonType.ROCK] },
@@ -36,11 +44,6 @@ export const TYPE_CHART: Record<PokemonType, { strong: PokemonType[]; weak: Poke
 };
 
 // Simplified Pokedex
-// Stats: 
-// FireRate: Lower is faster. 500 is standard.
-// MoveSpeed: Multiplier. 1.0 is standard.
-// ProjSpeed: Px/sec. 400 is standard.
-
 export const POKEDEX: Record<string, Omit<Pokemon, 'id' | 'nickname' | 'level' | 'xp' | 'xpToNextLevel' | 'stats' | 'shootPattern' | 'activeBuffs'> & { baseStats: { hp: number; attack: number; speed: number; fireRate: number; moveSpeed: number; projectileSpeed: number; shootPattern: ShootPattern } }> = {
   'charmander': {
     speciesId: 'charmander',

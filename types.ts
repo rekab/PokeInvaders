@@ -20,6 +20,14 @@ export enum ShootPattern {
   RAPID = 'rapid', // Fast fire rate
 }
 
+export enum Difficulty {
+  REALLY_EASY = 'REALLY_EASY',
+  EASY = 'EASY',
+  MIDDLE = 'MIDDLE',
+  DIFFICULT = 'DIFFICULT',
+  SUPER_DIFFICULT = 'SUPER_DIFFICULT',
+}
+
 export interface Stats {
   hp: number;
   maxHp: number;
@@ -171,6 +179,8 @@ export interface GameState {
   highScore: number;
   lastFrameTime: number;
   globalAnimFrame: 0 | 1; // For synchronizing enemy walks
+  difficulty: Difficulty;
+  queuedPowerups: PowerUpType[]; // Powerups earned from trading to be spawned next wave
 }
 
 export interface Rect {
